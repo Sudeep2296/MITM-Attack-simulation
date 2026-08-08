@@ -1,0 +1,733 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Diffie-Hellman · MITM · PKI Visualizer</title>
+<style>
+  :root {
+    --bg: #0f1220;
+    --panel: #171b2e;
+    --panel-2: #1e2338;
+    --border: #2c3350;
+    --text: #e7e9f5;
+    --muted: #9aa1c4;
+    --alice: #5eb0ff;
+    --bob: #6de3a7;
+    --mallory: #ff6e6e;
+    --ca: #d9a5ff;
+    --good: #4ade80;
+    --bad: #f87171;
+    --warn: #fbbf24;
+    --accent: #8b7bff;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: radial-gradient(1200px 600px at 50% -10%, #1b2044 0%, var(--bg) 60%);
+    color: var(--text);
+    font-family: "Segoe UI", Inter, Roboto, Arial, sans-serif;
+    padding: 24px;
+  }
+  h1 { font-size: 22px; margin: 0 0 4px 0; letter-spacing: 0.2px; }
+  .subtitle { color: var(--muted); font-size: 13px; margin-bottom: 20px; }
+
+  .panel {
+    background: linear-gradient(180deg, var(--panel), var(--panel-2));
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 16px 18px;
+    margin-bottom: 16px;
+  }
+
+  /* ---- Controls ---- */
+  .controls { display: flex; flex-wrap: wrap; align-items: center; gap: 22px; }
+  .toggle-row { display: flex; align-items: center; gap: 10px; }
+  .toggle {
+    position: relative; width: 46px; height: 26px; border-radius: 999px;
+    background: #2b3151; cursor: pointer; transition: background 0.2s; flex-shrink: 0;
+    border: 1px solid var(--border);
+  }
+  .toggle.on { background: var(--accent); }
+  .toggle .knob {
+    position: absolute; top: 2px; left: 2px; width: 20px; height: 20px; border-radius: 50%;
+    background: white; transition: left 0.2s;
+  }
+  .toggle.on .knob { left: 22px; }
+  .toggle-label { font-size: 14px; }
+  .toggle-desc { font-size: 11.5px; color: var(--muted); }
+
+  button {
+    font-family: inherit; font-size: 14px; font-weight: 600; padding: 10px 18px;
+    border-radius: 10px; border: none; cursor: pointer; transition: transform 0.08s, opacity 0.2s;
+  }
+  button:active { transform: scale(0.97); }
+  button:disabled { opacity: 0.45; cursor: not-allowed; }
+  #runBtn { background: linear-gradient(135deg, #8b7bff, #6a5cff); color: white; }
+  #resetBtn { background: #262b46; color: var(--text); border: 1px solid var(--border); }
+
+  .status-pill {
+    margin-left: auto; font-size: 12.5px; padding: 6px 12px; border-radius: 999px;
+    border: 1px solid var(--border); color: var(--muted); background: #171b2e;
+  }
+  .status-pill.busy { color: var(--warn); border-color: #55461f; }
+  .status-pill.done-ok { color: var(--good); border-color: #17402b; }
+  .status-pill.done-bad { color: var(--bad); border-color: #4a1f22; }
+
+  /* ---- Stage ---- */
+  #stageWrap { overflow-x: auto; }
+  #stage {
+    display: grid;
+    grid-template-columns: 190px 90px 0px 90px 190px;
+    align-items: center;
+    min-width: 760px;
+    transition: grid-template-columns 0.4s ease;
+    gap: 0;
+    padding: 10px 0 26px 0;
+  }
+  #stage.attacker-on { grid-template-columns: 190px 90px 190px 90px 190px; }
+
+  .actor {
+    background: #12162a; border: 1.5px solid var(--border); border-radius: 16px;
+    padding: 14px; text-align: center; position: relative; transition: opacity 0.3s, transform 0.3s;
+  }
+  .actor .avatar { font-size: 34px; line-height: 1; margin-bottom: 6px; }
+  .actor .name { font-weight: 700; font-size: 15px; margin-bottom: 2px; }
+  .actor .role { font-size: 11px; color: var(--muted); margin-bottom: 10px; }
+  .actor .kv { font-size: 10.5px; color: var(--muted); text-align: left; margin-top: 6px; }
+  .actor .kv .row { display: flex; justify-content: space-between; gap: 6px; padding: 2px 0; border-top: 1px dashed #262c4a; }
+  .actor .kv .row span:first-child { color: #7a81ab; }
+  .actor .kv .row span:last-child { font-family: "Cascadia Code", Consolas, monospace; color: #cfd3ee; }
+  .actor.alice { border-color: #234064; box-shadow: 0 0 0 1px #1a2c47 inset; }
+  .actor.bob { border-color: #1f4636; box-shadow: 0 0 0 1px #17321f inset; }
+  .actor.mallory { border-color: #4a2226; box-shadow: 0 0 0 1px #3a1a1e inset; opacity: 0; transform: scale(0.85); pointer-events: none; }
+  #stage.attacker-on .actor.mallory { opacity: 1; transform: scale(1); pointer-events: auto; }
+  .actor .badge {
+    position: absolute; top: -10px; right: 10px; font-size: 10px; font-weight: 700;
+    padding: 3px 9px; border-radius: 999px; background: #1c2140; border: 1px solid var(--border); color: var(--muted);
+  }
+  .badge.ok { color: var(--good); border-color: #1c4a2f; background: #10241a; }
+  .badge.fail { color: var(--bad); border-color: #4a1f22; background: #241012; }
+  .badge.pulse { animation: pulse 1.1s infinite; }
+  @keyframes pulse { 0%,100%{ box-shadow: 0 0 0 0 rgba(139,123,255,0.5);} 50%{ box-shadow: 0 0 0 6px rgba(139,123,255,0);} }
+
+  .track { position: relative; height: 3px; background: #262c4a; margin: 0 4px; border-radius: 2px; }
+  .track::before, .track::after {
+    content: ""; position: absolute; top: -3px; width: 9px; height: 9px; border-radius: 50%;
+    background: #262c4a;
+  }
+  .track::before { left: -3px; } .track::after { right: -3px; }
+  .packet {
+    position: absolute; top: -9px; width: 21px; height: 21px; border-radius: 7px;
+    display: flex; align-items: center; justify-content: center; font-size: 11px;
+    color: #10142a; font-weight: 800; box-shadow: 0 2px 10px rgba(0,0,0,0.4);
+    transition: left 0.85s cubic-bezier(.4,.1,.2,1);
+    z-index: 5;
+  }
+  .packet.dh { background: var(--alice); }
+  .packet.cert { background: var(--ca); }
+  .packet.sig { background: var(--warn); }
+  .packet.ct { background: #ffa257; }
+  .packet.bad { background: var(--mallory); }
+
+  /* ---- Log ---- */
+  #log {
+    font-family: "Cascadia Code", Consolas, monospace; font-size: 12.6px; line-height: 1.65;
+    height: 260px; overflow-y: auto; background: #0c0f1d; border-radius: 10px; padding: 12px 14px;
+    border: 1px solid var(--border);
+  }
+  #log .line { white-space: pre-wrap; opacity: 0; animation: fadeIn 0.25s forwards; }
+  @keyframes fadeIn { to { opacity: 1; } }
+  .tag { display:inline-block; min-width: 66px; font-weight: 700; }
+  .t-alice { color: var(--alice); } .t-bob { color: var(--bob); } .t-mallory { color: var(--mallory); }
+  .t-ca { color: var(--ca); } .t-ok { color: var(--good); } .t-bad { color: var(--bad); } .t-sys { color: var(--muted); }
+
+  /* ---- Result panel / run history ---- */
+  #resultPanel { display: none; }
+  #resultPanel.show { display: block; }
+  .run-card {
+    border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; margin-bottom: 14px;
+    background: #10142650; animation: fadeIn 0.3s;
+  }
+  .run-card:first-child { border-color: var(--accent); box-shadow: 0 0 0 1px rgba(139,123,255,0.25); }
+  .run-card .run-head {
+    display: flex; align-items: center; gap: 10px; margin-bottom: 12px; font-size: 12px; color: var(--muted);
+  }
+  .run-card .run-num {
+    font-weight: 800; color: var(--text); background: #262b46; padding: 2px 9px; border-radius: 999px; font-size: 11.5px;
+  }
+  .run-card .run-tags span {
+    display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 10.5px; font-weight: 700; margin-right: 6px;
+  }
+  .run-tag-attacker-on { background: #3a1a1e; color: var(--mallory); }
+  .run-tag-attacker-off { background: #1a2033; color: var(--muted); }
+  .run-tag-auth-on { background: #2a1d47; color: var(--ca); }
+  .run-tag-auth-off { background: #1a2033; color: var(--muted); }
+  .run-card .run-latest-badge {
+    margin-left: auto; font-size: 10.5px; font-weight: 700; color: var(--accent); background: #201c46; padding: 2px 9px; border-radius: 999px;
+  }
+  .result-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 700px) { .result-grid { grid-template-columns: 1fr; } }
+  .result-box { background: #0c0f1d; border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+  .result-box .label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 6px; }
+  .result-box .msg { font-size: 14.5px; font-family: "Cascadia Code", Consolas, monospace; }
+  .diff-match { color: var(--good); }
+  .diff-changed { color: var(--bad); font-weight: 700; text-decoration: underline wavy var(--bad); }
+  .verdict {
+    margin-top: 14px; padding: 12px 14px; border-radius: 10px; font-size: 14px; font-weight: 600;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .verdict.ok { background: #10241a; color: var(--good); border: 1px solid #1c4a2f; }
+  .verdict.bad { background: #241012; color: var(--bad); border: 1px solid #4a1f22; }
+
+  /* ---- Log run separators ---- */
+  .log-sep {
+    margin: 10px 0 8px 0; padding: 6px 10px; border-radius: 8px; background: #1a1f3a;
+    border-left: 3px solid var(--accent); font-weight: 700; color: var(--text); font-size: 12px;
+  }
+  .log-sep:first-child { margin-top: 0; }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 11.5px; color: var(--muted); margin-top: 12px; }
+  .legend .dot { width: 9px; height: 9px; border-radius: 3px; display: inline-block; margin-right: 5px; }
+
+  footer { color: var(--muted); font-size: 11.5px; text-align: center; margin-top: 18px; }
+</style>
+</head>
+<body>
+
+  <h1>🔐 Diffie-Hellman Key Exchange — MITM Attack &amp; PKI Defense</h1>
+  <div class="subtitle">Interactive visualizer · runs real 2048-bit Diffie-Hellman, RSA-PSS signatures, and AES-GCM encryption in your browser via the Web Crypto API</div>
+
+  <div class="panel">
+    <div class="controls">
+      <div class="toggle-row">
+        <div class="toggle" id="toggleAttacker" onclick="setAttacker(!state.attackerOn)"><div class="knob"></div></div>
+        <div>
+          <div class="toggle-label">🕵️ Attacker Present (Mallory)</div>
+          <div class="toggle-desc">Intercepts the exchange as a man-in-the-middle</div>
+        </div>
+      </div>
+      <div class="toggle-row">
+        <div class="toggle" id="toggleAuth" onclick="setAuth(!state.authOn)"><div class="knob"></div></div>
+        <div>
+          <div class="toggle-label">📜 Authentication (PKI) Enabled</div>
+          <div class="toggle-desc">CA-signed certificates + signed DH values</div>
+        </div>
+      </div>
+      <button id="runBtn" onclick="runDemo()">▶ Run Exchange</button>
+      <button id="resetBtn" onclick="resetAll()">Reset</button>
+      <div class="status-pill" id="statusPill">Ready</div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div id="stageWrap">
+      <div id="stage">
+        <div class="actor alice" id="actorAlice">
+          <div class="badge" id="badgeAlice" style="display:none;"></div>
+          <div class="avatar">👩</div>
+          <div class="name">Alice</div>
+          <div class="role">Initiator</div>
+          <div class="kv" id="kvAlice"></div>
+        </div>
+        <div class="track" id="trackAM"></div>
+        <div class="actor mallory" id="actorMallory">
+          <div class="badge" id="badgeMallory" style="display:none;"></div>
+          <div class="avatar">🕵️</div>
+          <div class="name">Mallory</div>
+          <div class="role">Attacker (proxy)</div>
+          <div class="kv" id="kvMallory"></div>
+        </div>
+        <div class="track" id="trackMB"></div>
+        <div class="actor bob" id="actorBob">
+          <div class="badge" id="badgeBob" style="display:none;"></div>
+          <div class="avatar">🧑</div>
+          <div class="name">Bob</div>
+          <div class="role">Responder</div>
+          <div class="kv" id="kvBob"></div>
+        </div>
+      </div>
+    </div>
+    <div class="legend">
+      <span><span class="dot" style="background:var(--alice)"></span>DH public value</span>
+      <span><span class="dot" style="background:var(--ca)"></span>Certificate</span>
+      <span><span class="dot" style="background:var(--warn)"></span>Signature</span>
+      <span><span class="dot" style="background:#ffa257"></span>Encrypted message</span>
+      <span><span class="dot" style="background:var(--mallory)"></span>Forged / substituted value</span>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+      <div style="font-size:13px; color:var(--muted); font-weight:600;">LIVE LOG <span style="color:#5a6190; font-weight:400;">(full history — cleared only on Reset)</span></div>
+    </div>
+    <div id="log"></div>
+  </div>
+
+  <div class="panel" id="resultPanel">
+    <div style="font-size:13px; color:var(--muted); margin-bottom:10px; font-weight:600;">RUN HISTORY <span style="color:#5a6190; font-weight:400;">(most recent first — great for comparing runs while explaining)</span></div>
+    <div id="resultHistory"></div>
+  </div>
+
+  <footer>All keys, certificates, and secrets are generated fresh in-browser for this demo and never leave your machine.</footer>
+
+<script>
+// ============================================================================
+// State & DOM helpers
+// ============================================================================
+const state = { attackerOn: false, authOn: false, busy: false, runCount: 0 };
+
+function setAttacker(v) {
+  if (state.busy) return;
+  state.attackerOn = v;
+  document.getElementById('toggleAttacker').classList.toggle('on', v);
+  document.getElementById('stage').classList.toggle('attacker-on', v);
+}
+function setAuth(v) {
+  if (state.busy) return;
+  state.authOn = v;
+  document.getElementById('toggleAuth').classList.toggle('on', v);
+}
+
+const logEl = document.getElementById('log');
+function log(tagClass, tag, text) {
+  const line = document.createElement('div');
+  line.className = 'line';
+  line.innerHTML = `<span class="tag ${tagClass}">[${tag}]</span> ${text}`;
+  logEl.appendChild(line);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+function logSeparator(runNum, attackerOn, authOn) {
+  const sep = document.createElement('div');
+  sep.className = 'log-sep';
+  sep.textContent = `▶ RUN #${runNum} — Attacker: ${attackerOn ? 'ON' : 'OFF'}, Authentication: ${authOn ? 'ON' : 'OFF'}`;
+  logEl.appendChild(sep);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+function clearLog() { logEl.innerHTML = ''; }
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+function setStatus(text, cls) {
+  const el = document.getElementById('statusPill');
+  el.textContent = text;
+  el.className = 'status-pill' + (cls ? ' ' + cls : '');
+}
+
+function setBadge(id, text, kind) {
+  const el = document.getElementById(id);
+  el.style.display = text ? 'block' : 'none';
+  el.textContent = text;
+  el.className = 'badge' + (kind ? ' ' + kind : '');
+}
+
+function setKV(id, rows) {
+  const el = document.getElementById(id);
+  el.innerHTML = rows.map(([k, v]) => `<div class="row"><span>${k}</span><span>${v}</span></div>`).join('');
+}
+
+function short(hexOrStr, n = 10) {
+  const s = String(hexOrStr);
+  if (s.length <= n * 2 + 3) return s;
+  return s.slice(0, n) + '…' + s.slice(-4);
+}
+
+// Animate a packet traveling across one or more track elements in sequence
+async function travel(trackIds, cls, label, reverse = false) {
+  const ids = reverse ? [...trackIds].reverse() : trackIds;
+  for (const id of ids) {
+    const track = document.getElementById(id);
+    const packet = document.createElement('div');
+    packet.className = 'packet ' + cls;
+    packet.textContent = label;
+    packet.style.left = reverse ? '100%' : '-10px';
+    track.appendChild(packet);
+    await sleep(30);
+    packet.style.left = reverse ? '-10px' : 'calc(100% - 10px)';
+    await sleep(900);
+    packet.remove();
+  }
+}
+
+// ============================================================================
+// Crypto helpers (Web Crypto API + BigInt DH)
+// ============================================================================
+const enc = new TextEncoder();
+
+// RFC 3526 Group 14 — 2048-bit MODP prime
+const P_HEX = "FFFFFFFFFFFFFFFFC90FDAA22168C234C4C6628B80DC1CD129024E088A67CC74020BBEA63B139B22514A08798E3404DDEF9519B3CD3A431B302B0A6DF25F14374FE1356D6D51C245E485B576625E7EC6F44C42E9A637ED6B0BFF5CB6F406B7EDEE386BFB5A899FA5AE9F24117C4B1FE649286651ECE45B3DC2007CB8A163BF0598DA48361C55D39A69163FA8FD24CF5F83655D23DCA3AD961C62F356208552BB9ED529077096966D670C354E4ABC9804F1746C08CA18217C32905E462E36CE3BE39E772C180E86039B2783A2EC07A28FB5C55DF06F4C52C9DE2BCBF69558171839954 97CEA956AE515D2261898FA051015728E5A8AACAA68FFFFFFFFFFFFFFFF".replace(/\s/g, '');
+const P = BigInt("0x" + P_HEX);
+const G = 2n;
+
+function modPow(base, exp, mod) {
+  let result = 1n; base %= mod;
+  while (exp > 0n) {
+    if (exp & 1n) result = (result * base) % mod;
+    exp >>= 1n;
+    base = (base * base) % mod;
+  }
+  return result;
+}
+function randomBigInt(bytes = 32) {
+  const arr = new Uint8Array(bytes);
+  crypto.getRandomValues(arr);
+  let hex = '0x' + [...arr].map(b => b.toString(16).padStart(2, '0')).join('');
+  return BigInt(hex);
+}
+function genDHKeypair() {
+  const priv = randomBigInt(32);
+  const pub = modPow(G, priv, P);
+  return { priv, pub };
+}
+function bufToHex(buf) { return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join(''); }
+function hexToBuf(hex) {
+  const arr = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < arr.length; i++) arr[i] = parseInt(hex.substr(i * 2, 2), 16);
+  return arr.buffer;
+}
+
+async function genRSAKeypair() {
+  return crypto.subtle.generateKey(
+    { name: "RSA-PSS", modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: "SHA-256" },
+    true, ["sign", "verify"]
+  );
+}
+async function exportSpki(pubKey) { return crypto.subtle.exportKey("spki", pubKey); }
+async function importSpki(spki) {
+  return crypto.subtle.importKey("spki", spki, { name: "RSA-PSS", hash: "SHA-256" }, true, ["verify"]);
+}
+async function signBytes(privKey, dataBuf) {
+  return crypto.subtle.sign({ name: "RSA-PSS", saltLength: 32 }, privKey, dataBuf);
+}
+async function verifyBytes(pubKey, sigBuf, dataBuf) {
+  return crypto.subtle.verify({ name: "RSA-PSS", saltLength: 32 }, pubKey, sigBuf, dataBuf);
+}
+
+// Certificate = { subject, spki (ArrayBuffer), sigHex }
+async function issueCertificate(caPriv, subject, subjectPub) {
+  const spki = await exportSpki(subjectPub);
+  const payload = new Uint8Array(enc.encode(subject).length + spki.byteLength);
+  payload.set(enc.encode(subject), 0);
+  payload.set(new Uint8Array(spki), enc.encode(subject).length);
+  const sig = await signBytes(caPriv, payload);
+  return { subject, spki, sigHex: bufToHex(sig) };
+}
+async function verifyCertificate(caPub, cert) {
+  const payload = new Uint8Array(enc.encode(cert.subject).length + cert.spki.byteLength);
+  payload.set(enc.encode(cert.subject), 0);
+  payload.set(new Uint8Array(cert.spki), enc.encode(cert.subject).length);
+  return verifyBytes(caPub, hexToBuf(cert.sigHex), payload);
+}
+async function signDHValue(privKey, dhPublicBigInt) {
+  return signBytes(privKey, enc.encode(dhPublicBigInt.toString()));
+}
+async function verifyDHSignature(pubKey, dhPublicBigInt, sigBuf) {
+  return verifyBytes(pubKey, sigBuf, enc.encode(dhPublicBigInt.toString()));
+}
+
+async function deriveAESKey(sharedSecretBigInt) {
+  const digest = await crypto.subtle.digest("SHA-256", enc.encode(sharedSecretBigInt.toString()));
+  return crypto.subtle.importKey("raw", digest, "AES-GCM", false, ["encrypt", "decrypt"]);
+}
+async function aesEncrypt(key, plaintext) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, enc.encode(plaintext));
+  return { iv: bufToHex(iv), ct: bufToHex(ct) };
+}
+async function aesDecrypt(key, ivHex, ctHex) {
+  const dec = await crypto.subtle.decrypt({ name: "AES-GCM", iv: new Uint8Array(hexToBuf(ivHex)) }, key, hexToBuf(ctHex));
+  return new TextDecoder().decode(dec);
+}
+
+// ============================================================================
+// One-time PKI setup (CA + Alice/Bob certificates), generated lazily
+// ============================================================================
+let pki = null;
+async function ensurePKI() {
+  if (pki) return pki;
+  setStatus('Setting up PKI (RSA-2048)…', 'busy');
+  const ca = await genRSAKeypair();
+  const aliceId = await genRSAKeypair();
+  const bobId = await genRSAKeypair();
+  const malloryId = await genRSAKeypair();
+  const aliceCert = await issueCertificate(ca.privateKey, "Alice", aliceId.publicKey);
+  const bobCert = await issueCertificate(ca.privateKey, "Bob", bobId.publicKey);
+  pki = { ca, aliceId, bobId, malloryId, aliceCert, bobCert };
+  setStatus('Ready', '');
+  return pki;
+}
+
+// ============================================================================
+// Demo orchestration
+// ============================================================================
+const ORIGINAL_MESSAGE = "Hey Bob, my card PIN is 4471, don't tell anyone!";
+
+function resetActorPanels() {
+  setBadge('badgeAlice', '', ''); setBadge('badgeMallory', '', ''); setBadge('badgeBob', '', '');
+  setKV('kvAlice', []); setKV('kvMallory', []); setKV('kvBob', []);
+}
+function resetAll() {
+  if (state.busy) return;
+  clearLog();
+  resetActorPanels();
+  document.getElementById('resultHistory').innerHTML = '';
+  document.getElementById('resultPanel').classList.remove('show');
+  state.runCount = 0;
+  setStatus('Ready', '');
+}
+
+async function runDemo() {
+  if (state.busy) return;
+  state.busy = true;
+  document.getElementById('runBtn').disabled = true;
+  resetActorPanels(); // clear per-actor badges/keys for the new run, but KEEP the log and result history
+  state.runCount += 1;
+  logSeparator(state.runCount, state.attackerOn, state.authOn);
+  setStatus('Running…', 'busy');
+  state._outcome = 'ok'; // 'ok' | 'blocked' | 'compromised'
+
+  try {
+    if (state.authOn) await ensurePKI();
+
+    if (!state.attackerOn) {
+      await runBaseline();
+    } else {
+      await runAttack();
+    }
+  } catch (err) {
+    log('t-bad', 'ERROR', err.message);
+    console.error(err);
+    state._outcome = 'error';
+  }
+
+  const statusMap = {
+    ok: ['Complete ✅', 'done-ok'],
+    blocked: ['Attack blocked ✅', 'done-ok'],
+    compromised: ['Attack succeeded 🚨', 'done-bad'],
+    error: ['Error', 'done-bad'],
+  };
+  const [text, cls] = statusMap[state._outcome];
+  setStatus(text, cls);
+  document.getElementById('runBtn').disabled = false;
+  state.busy = false;
+}
+
+// ---- Scenario 1: direct Alice <-> Bob, with or without authentication ----
+async function runBaseline() {
+  log('t-sys', 'SYSTEM', `Running direct exchange — Authentication: <b>${state.authOn ? 'ON' : 'OFF'}</b>, Attacker: OFF`);
+  const alice = genDHKeypair();
+  const bob = genDHKeypair();
+  setKV('kvAlice', [['priv a', short(alice.priv.toString(16))], ['pub A', short(alice.pub.toString(16))]]);
+  setKV('kvBob', [['priv b', short(bob.priv.toString(16))], ['pub B', short(bob.pub.toString(16))]]);
+
+  let aliceSig = null, bobSig = null;
+  if (state.authOn) {
+    aliceSig = await signDHValue(pki.aliceId.privateKey, alice.pub);
+    bobSig = await signDHValue(pki.bobId.privateKey, bob.pub);
+    log('t-alice', 'Alice', `Signs her DH value with her identity key, attaches her certificate.`);
+    log('t-bob', 'Bob', `Signs his DH value with his identity key, attaches his certificate.`);
+  }
+
+  await sleep(300);
+  await Promise.all([
+    travel(['trackAM', 'trackMB'], 'dh', 'A', false),
+  ]);
+  log('t-alice', 'Alice', `Sent DH public value A = ${short(alice.pub.toString(16))}${state.authOn ? ' + certificate + signature' : ''}`);
+
+  if (state.authOn) {
+    const ok = await verifyCertificate(pki.ca.publicKey, pki.aliceCert);
+    const pubKey = await importSpki(pki.aliceCert.spki);
+    const sigOk = await verifyDHSignature(pubKey, alice.pub, aliceSig);
+    log(ok && sigOk ? 't-ok' : 't-bad', 'Bob', `${ok ? '✔' : '✘'} Certificate valid. ${sigOk ? '✔' : '✘'} Signature valid.`);
+    setBadge('badgeBob', 'verified', 'ok');
+  }
+
+  await travel(['trackMB', 'trackAM'], 'dh', 'B', true);
+  log('t-bob', 'Bob', `Sent DH public value B = ${short(bob.pub.toString(16))}${state.authOn ? ' + certificate + signature' : ''}`);
+
+  if (state.authOn) {
+    const ok = await verifyCertificate(pki.ca.publicKey, pki.bobCert);
+    const pubKey = await importSpki(pki.bobCert.spki);
+    const sigOk = await verifyDHSignature(pubKey, bob.pub, bobSig);
+    log(ok && sigOk ? 't-ok' : 't-bad', 'Alice', `${ok ? '✔' : '✘'} Certificate valid. ${sigOk ? '✔' : '✘'} Signature valid.`);
+    setBadge('badgeAlice', 'verified', 'ok');
+  }
+
+  const secretAlice = modPow(bob.pub, alice.priv, P);
+  const secretBob = modPow(alice.pub, bob.priv, P);
+  log('t-sys', 'SYSTEM', `Both sides compute shared secret: ${short(secretAlice.toString(16))} ${secretAlice === secretBob ? '<span class="t-ok">(MATCH ✔)</span>' : '<span class="t-bad">(MISMATCH ✘)</span>'}`);
+
+  const key = await deriveAESKey(secretAlice);
+  const { iv, ct } = await aesEncrypt(key, ORIGINAL_MESSAGE);
+  log('t-alice', 'Alice', `Encrypts message with AES-256-GCM: ${short(ct)}`);
+  await travel(['trackAM', 'trackMB'], 'ct', '✉', false);
+
+  const keyBob = await deriveAESKey(secretBob);
+  const plaintext = await aesDecrypt(keyBob, iv, ct);
+  log(plaintext === ORIGINAL_MESSAGE ? 't-ok' : 't-bad', 'Bob', `Decrypts message: "${plaintext}"`);
+
+  showResult(ORIGINAL_MESSAGE, plaintext, true, null);
+}
+
+// ---- Scenario 2: Mallory in the middle, with or without authentication ----
+async function runAttack() {
+  log('t-sys', 'SYSTEM', `Running MITM attack — Authentication: <b>${state.authOn ? 'ON' : 'OFF'}</b>, Attacker: ON`);
+  const alice = genDHKeypair();
+  const bob = genDHKeypair();
+  const malloryForAlice = genDHKeypair(); // Mallory's leg toward Alice (posing as Bob)
+  const malloryForBob = genDHKeypair();   // Mallory's leg toward Bob (posing as Alice)
+
+  setKV('kvAlice', [['priv a', short(alice.priv.toString(16))], ['pub A', short(alice.pub.toString(16))]]);
+  setKV('kvBob', [['priv b', short(bob.priv.toString(16))], ['pub B', short(bob.pub.toString(16))]]);
+  setKV('kvMallory', [['pub (→Alice)', short(malloryForAlice.pub.toString(16))], ['pub (→Bob)', short(malloryForBob.pub.toString(16))]]);
+  setBadge('badgeMallory', 'intercepting', 'pulse');
+
+  let aliceSig = null;
+  if (state.authOn) {
+    aliceSig = await signDHValue(pki.aliceId.privateKey, alice.pub);
+  }
+
+  await travel(['trackAM'], 'dh', 'A', false);
+  log('t-alice', 'Alice', `Sends her DH value${state.authOn ? ' + certificate + signature' : ''}, believing this reaches Bob.`);
+  log('t-mallory', 'Mallory', `Intercepts it. Real Alice value: ${short(alice.pub.toString(16))}`);
+
+  // ---- Mallory -> Alice leg ----
+  await travel(['trackAM'], 'bad', 'A\u2032', true);
+  log('t-mallory', 'Mallory', `Sends Alice a substituted value (pretending to be Bob): ${short(malloryForAlice.pub.toString(16))}`);
+  const secretMalloryAlice = modPow(alice.pub, malloryForAlice.priv, P);
+  const secretAliceSide = modPow(malloryForAlice.pub, alice.priv, P);
+  log('t-sys', 'SYSTEM', `Alice \u2194 Mallory shared secret established: ${short(secretAliceSide.toString(16))}`);
+
+  if (state.authOn) {
+    // Mallory cannot produce a valid Alice-identity signature; she can only forge with her own key.
+    const forgedSig = await signDHValue(pki.malloryId.privateKey, malloryForBob.pub);
+    await travel(['trackMB'], 'cert', '📜A', false);
+    log('t-mallory', 'Mallory', `Forwards Bob: Alice's real certificate + Mallory's own DH value, signed with Mallory's own key (not Alice's).`);
+    const certOk = await verifyCertificate(pki.ca.publicKey, pki.aliceCert);
+    const alicePubKey = await importSpki(pki.aliceCert.spki);
+    const sigOk = await verifyDHSignature(alicePubKey, malloryForBob.pub, forgedSig);
+    log(certOk ? 't-ok' : 't-bad', 'Bob', `${certOk ? '✔' : '✘'} Certificate for 'Alice' is validly CA-signed.`);
+    log(sigOk ? 't-ok' : 't-bad', 'Bob', `${sigOk ? '✔' : '✘'} DH-value signature valid for 'Alice'.`);
+
+    if (!sigOk) {
+      setBadge('badgeBob', 'REJECTED', 'fail');
+      setBadge('badgeMallory', 'attempt 1 failed', 'fail');
+      log('t-bob', 'Bob', `<span class="t-bad">ABORTING — refusing to respond. This DH value was not validly signed by Alice.</span>`);
+      await sleep(400);
+
+      log('t-sys', 'SYSTEM', `Mallory tries again — requests her OWN honest certificate from the CA.`);
+      const malloryCert = await issueCertificate(pki.ca.privateKey, "Mallory", pki.malloryId.publicKey);
+      const malSig2 = await signDHValue(pki.malloryId.privateKey, malloryForBob.pub);
+      await travel(['trackMB'], 'cert', '📜M', false);
+      const certOk2 = await verifyCertificate(pki.ca.publicKey, malloryCert);
+      const malPubKey = await importSpki(malloryCert.spki);
+      const sigOk2 = await verifyDHSignature(malPubKey, malloryForBob.pub, malSig2);
+      log(certOk2 && sigOk2 ? 't-ok' : 't-bad', 'Bob', `${certOk2 ? '✔' : '✘'} Certificate valid — but subject is <b>'Mallory'</b>, not 'Alice'. ${sigOk2 ? '✔ Signature valid.' : ''}`);
+      setBadge('badgeMallory', 'identified as Mallory', 'fail');
+      setBadge('badgeBob', 'no impersonation', 'ok');
+
+      log('t-sys', 'SYSTEM', `Bob now knowingly talks to 'Mallory' — Alice's message is never delivered under a false identity.`);
+      log('t-alice', 'Alice', `Never receives a valid response. Her connection times out — the attack was detected and blocked.`);
+      showResult(ORIGINAL_MESSAGE, '(no message delivered — handshake rejected)', false, 'blocked');
+      state._outcome = 'blocked';
+      return;
+    }
+  }
+
+  // ---- Unauthenticated (or hypothetically-successful) path: Mallory <-> Bob leg ----
+  await travel(['trackMB'], 'bad', 'A\u2032', false);
+  log('t-mallory', 'Mallory', `Sends Bob a substituted value (pretending to be Alice): ${short(malloryForBob.pub.toString(16))}`);
+  await travel(['trackMB'], 'dh', 'B', true);
+  log('t-bob', 'Bob', `Responds with his real DH value: ${short(bob.pub.toString(16))}`);
+  const secretMalloryBob = modPow(bob.pub, malloryForBob.priv, P);
+  const secretBobSide = modPow(malloryForBob.pub, bob.priv, P);
+  log('t-sys', 'SYSTEM', `Mallory \u2194 Bob shared secret established: ${short(secretBobSide.toString(16))}`);
+  log('t-bad', 'RESULT', `Mallory now holds <b>two independent shared secrets</b>. Alice and Bob believe they share one with each other — they do not.`);
+
+  const keyAliceSide = await deriveAESKey(secretAliceSide);
+  const { iv, ct } = await aesEncrypt(keyAliceSide, ORIGINAL_MESSAGE);
+  await travel(['trackAM'], 'ct', '✉', false);
+  log('t-alice', 'Alice', `Encrypts and sends her "secret" message: ${short(ct)}`);
+
+  const keyMalloryAliceSide = await deriveAESKey(secretMalloryAlice);
+  const intercepted = await aesDecrypt(keyMalloryAliceSide, iv, ct);
+  log('t-mallory', 'Mallory', `Decrypts it: "${intercepted}"`);
+  const tampered = intercepted.replace('4471', '9999');
+  log('t-mallory', 'Mallory', `Tampers with it: "${tampered}"`);
+
+  const keyMalloryBobSide = await deriveAESKey(secretMalloryBob);
+  const fwd = await aesEncrypt(keyMalloryBobSide, tampered);
+  await travel(['trackMB'], 'ct', '✉', false);
+
+  const keyBobSide = await deriveAESKey(secretBobSide);
+  const bobPlaintext = await aesDecrypt(keyBobSide, fwd.iv, fwd.ct);
+  log('t-bad', 'Bob', `Decrypts and believes it's authentic: "${bobPlaintext}"`);
+  setBadge('badgeMallory', 'attack succeeded', 'fail');
+  setBadge('badgeBob', 'compromised', 'fail');
+
+  showResult(ORIGINAL_MESSAGE, bobPlaintext, false, 'succeeded');
+  state._outcome = 'compromised';
+}
+
+function showResult(sent, received, matches, forcedVerdict) {
+  let verdictClass, verdictHtml;
+  if (forcedVerdict === 'blocked') {
+    verdictClass = 'ok';
+    verdictHtml = `✅ <b>Attack blocked.</b> Signature verification caught the forged DH value before any secret was shared with Mallory.`;
+  } else if (forcedVerdict === 'succeeded') {
+    verdictClass = 'bad';
+    verdictHtml = `🚨 <b>Attack succeeded.</b> Mallory read and silently altered the message. Neither Alice nor Bob detected anything wrong.`;
+  } else if (matches && sent === received) {
+    verdictClass = 'ok';
+    verdictHtml = `✅ <b>Exchange succeeded securely.</b> The message arrived unmodified.`;
+  } else {
+    verdictClass = 'bad';
+    verdictHtml = `🚨 <b>Message does not match what Alice sent.</b>`;
+  }
+
+  const history = document.getElementById('resultHistory');
+
+  // Mark all previous cards as no longer "latest"
+  history.querySelectorAll('.run-latest-badge').forEach(el => el.remove());
+
+  const card = document.createElement('div');
+  card.className = 'run-card';
+  card.innerHTML = `
+    <div class="run-head">
+      <span class="run-num">RUN #${state.runCount}</span>
+      <span class="run-tags">
+        <span class="${state.attackerOn ? 'run-tag-attacker-on' : 'run-tag-attacker-off'}">Attacker ${state.attackerOn ? 'ON' : 'OFF'}</span>
+        <span class="${state.authOn ? 'run-tag-auth-on' : 'run-tag-auth-off'}">Auth ${state.authOn ? 'ON' : 'OFF'}</span>
+      </span>
+      <span class="run-latest-badge">LATEST</span>
+    </div>
+    <div class="result-grid">
+      <div class="result-box">
+        <div class="label">Alice sent</div>
+        <div class="msg">${escapeHtml(sent)}</div>
+      </div>
+      <div class="result-box">
+        <div class="label">Bob received (decrypted)</div>
+        <div class="msg">${diffHighlight(sent, received)}</div>
+      </div>
+    </div>
+    <div class="verdict ${verdictClass}">${verdictHtml}</div>
+  `;
+
+  history.insertBefore(card, history.firstChild);
+  document.getElementById('resultPanel').classList.add('show');
+  card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+function escapeHtml(s) { return s.replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function diffHighlight(a, b) {
+  const aw = a.split(' '), bw = b.split(' ');
+  return bw.map((w, i) => {
+    const cls = (aw[i] === w) ? 'diff-match' : 'diff-changed';
+    return `<span class="${cls}">${escapeHtml(w)}</span>`;
+  }).join(' ');
+}
+
+// init
+setAttacker(false);
+setAuth(false);
+</script>
+</body>
+</html>
