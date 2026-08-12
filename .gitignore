@@ -1,0 +1,12 @@
+# Python
+__pycache__/
+*.py[cod]
+
+# Generated PKI material
+pki/*.pem
+pki/*_cert.json
+
+# Local environments
+.venv/
+venv/
+.env
