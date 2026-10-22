@@ -11,9 +11,6 @@ npm install
 # Start local development server
 npm run dev
 
-# Run unit tests, extended edge cases, and Playwright E2E browser validation
-npm test
-
 # Build production bundle
 npm run build
 ```
