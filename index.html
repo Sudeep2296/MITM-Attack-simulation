@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Diffie–Hellman Key Exchange & MITM Simulator</title>
+  <meta name="description"
+    content="Academic demonstration of the Diffie-Hellman Key Exchange algorithm and Man-in-the-Middle attack with dynamic number-theoretic validation.">
+  <link rel="stylesheet" href="./src/styles/main.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;850&family=JetBrains+Mono:wght@500;600;700;800&display=swap"
+    rel="stylesheet">
+</head>
+
+<body>
+  <div class="container">
+
+    <!-- 1. Header Section -->
+    <header class="header-card">
+      <div class="header-title-group">
+        <span class="eyebrow"><span class="eyebrow-dot"></span> Interactive cryptography lab</span>
+        <h1>Diffie–Hellman Key Exchange <span>&amp; MITM Simulator</span></h1>
+        <p>BCS703 · Cryptography &amp; Network Security (C&amp;NS) Lab Demonstration</p>
+      </div>
+      <div class="header-actions">
+        <button id="btn-load-example" class="btn btn-secondary" type="button"
+          title="Load textbook demonstration parameters (p=23, g=5, a=6, b=15)">
+          Load Example Parameters
+        </button>
+        <button id="btn-reset" class="btn btn-secondary" type="button" title="Clear all fields and reset simulation">
+          Reset
+        </button>
+      </div>
+    </header>
+
+    <!-- 2. Scenario Mode Selector -->
+    <section class="scenario-section">
+      <div class="scenario-section-header">
+        <span class="scenario-title">Demonstration Scenario</span>
+      </div>
+      <div class="scenario-grid">
+        <div id="btn-mode-normal" class="scenario-card normal active" role="button" tabindex="0">
+          <input type="radio" name="scenario_mode" id="radio-mode-normal" class="scenario-radio" checked>
+          <div class="scenario-info">
+            <h3>Normal Diffie–Hellman Key Exchange</h3>
+            <p>Alice and Bob exchange keys directly.</p>
+          </div>
+        </div>
+
+        <div id="btn-mode-mitm" class="scenario-card mitm" role="button" tabindex="0">
+          <input type="radio" name="scenario_mode" id="radio-mode-mitm" class="scenario-radio">
+          <div class="scenario-info">
+            <h3>Man-in-the-Middle (MITM) Attack</h3>
+            <p>Mallory intercepts and replaces public keys.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- STEP 1: Public Information Setup -->
+    <section class="panel step-card">
+      <div class="step-header">
+        <span class="step-kicker">01 · Establish the public foundation</span>
+        <h2 class="step-title">Step 1: Public Information Setup</h2>
+      </div>
+
+      <!-- Informational Callout (Amber) -->
+      <div class="callout-box callout-amber">
+        Public values: prime <strong>p</strong> and generator <strong>g</strong>.
+      </div>
+
+      <!-- Public Parameters Form Inputs -->
+      <div class="step1-container">
+        <!-- Prime Modulus p (Manual Type) -->
+        <div class="step-param-row">
+          <label class="step-param-label" for="input-p">
+            Prime Number (p):
+          </label>
+          <div class="step-input-wrap">
+            <input type="number" id="input-p" class="form-input param-input-sm" placeholder="e.g. 23" min="2">
+            <button id="btn-generate-p" class="btn-action-green" type="button" title="Select a random prime number">
+              Generate Prime
+            </button>
+          </div>
+        </div>
+        <div id="feedback-p" class="inline-feedback-row"></div>
+
+        <!-- Generator g (Manual Type) -->
+        <div class="step-param-row">
+          <label class="step-param-label" for="input-g">
+            Generator (g):
+          </label>
+          <div class="step-input-wrap">
+            <input type="number" id="input-g" class="form-input param-input-sm" placeholder="e.g. 5" min="2" disabled>
+            <button id="btn-generate-g" class="btn-action-green" type="button" title="Choose a primitive root modulo p" disabled>
+              Another Generator
+            </button>
+          </div>
+        </div>
+        <div id="feedback-g" class="inline-feedback-row"></div>
+      </div>
+
+    </section>
+
+    <!-- STEP 2: Private Key Generation & Public Key Calculation -->
+    <section class="panel step-card">
+      <div class="step-header">
+        <span class="step-kicker">02 · Exchange keys over the network</span>
+        <h2 class="step-title">Step 2: Private Key Generation and Public Key Calculation</h2>
+      </div>
+
+      <!-- Informational Callout (Amber) -->
+      <div class="callout-box callout-amber">
+        Compute public keys: <strong>g<sup>private key</sup> mod p</strong>
+      </div>
+
+      <!-- 2D Architecture & Participants Grid -->
+      <div id="network-flow" class="protocol-diagram-grid">
+
+        <!-- Alice Participant Card (Coral/Red Accent) -->
+        <div class="endpoint-card alice" id="node-alice">
+          <div class="endpoint-header">
+            <span class="endpoint-title" style="color: #ef4444;">Alice</span>
+            <span class="endpoint-badge badge-alice">Initiator</span>
+          </div>
+
+          <div class="endpoint-body">
+            <!-- Alice Private Key Input -->
+            <div class="card-section-item">
+              <label class="card-field-label" for="input-a">Private Key (a):</label>
+              <div class="card-input-row">
+                <input type="number" id="input-a" class="form-input param-input-sm" placeholder="e.g. 6" min="1" disabled>
+                <button id="btn-generate-a" class="btn-action-green" type="button" title="Generate Alice private key" disabled>
+                  Generate A
+                </button>
+              </div>
+              <div id="feedback-a" class="inline-feedback"></div>
+            </div>
+
+            <!-- Alice Public Key Calculation -->
+            <div class="card-section-item">
+              <span class="card-field-label">Public Key (g^a mod p):</span>
+              <div class="card-input-row">
+                <div class="metric-display-box" id="disp-alice-pub">—</div>
+                <button id="btn-calc-alice-pub" class="btn-action-green" type="button" title="Calculate g^a mod p" disabled>
+                  Calculate g^a
+                </button>
+              </div>
+            </div>
+
+            <div style="display: none;"><span id="disp-alice-priv">—</span></div>
+
+            <!-- Send Public Key to Bob Button -->
+            <button id="btn-send-alice" class="btn-action-blue" type="button" title="Send Alice's public key across channel" disabled>
+              Send Public Key to Bob
+            </button>
+
+            <!-- Received from Bob -->
+            <div class="card-section-item">
+              <span class="card-field-label">Received from Bob:</span>
+              <div class="metric-display-box" id="disp-alice-received">—</div>
+            </div>
+
+            <!-- Alice Derived Shared Secret -->
+            <div class="card-section-item">
+              <span class="card-field-label">Shared Secret:</span>
+              <button id="btn-calc-alice-secret" class="btn-action-orange" type="button" title="Calculate shared secret" disabled>
+                Calculate Shared Secret
+              </button>
+              <div class="metric-display-box" id="disp-alice-secret">—</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Normal Channel Wire (Alice ⇄ Bob) -->
+        <div id="wire-normal" class="channel-column">
+          <span class="channel-caption">Public Channel</span>
+          <span id="wire-tag-a" class="channel-badge">A &rarr;</span>
+          <span id="wire-tag-b" class="channel-badge">&larr; B</span>
+        </div>
+
+        <!-- MITM Left Wire Column (Alice ⇄ Mallory) -->
+        <div id="wire-mitm-left" class="channel-column mitm-channel" style="display: none;">
+          <span class="channel-caption" style="color: var(--color-danger);">Intercepted</span>
+          <span id="tag-a-intercept" class="channel-badge intercepted">A &rarr; (Intercepted)</span>
+          <span id="tag-ma-spoof" class="channel-badge intercepted">&larr; Fake M_A</span>
+        </div>
+
+        <!-- Mallory Attacker Interceptor Card (MITM Mode) -->
+        <div class="endpoint-card mallory" id="node-mallory" style="display: none;">
+          <div class="endpoint-header">
+            <span class="endpoint-title" style="color: var(--color-danger);">Mallory</span>
+            <span class="endpoint-badge badge-mallory">Active Interceptor</span>
+          </div>
+
+          <!-- Mallory Parameters Container (Preserved ID) -->
+          <div id="mallory-fields-container" class="endpoint-body">
+            <!-- Mallory Exponent for Alice (m_A) -->
+            <div class="card-section-item">
+              <label class="card-field-label" for="input-ma">Attacker Key for Alice (m_A):</label>
+              <div class="card-input-row">
+                <input type="number" id="input-ma" class="form-input param-input-sm" placeholder="e.g. 4" min="1" disabled>
+                <button id="btn-generate-ma" class="btn-action-green" type="button" title="Generate attacker key for Alice" disabled>
+                  Generate m_A
+                </button>
+              </div>
+              <div id="feedback-ma" class="inline-feedback"></div>
+            </div>
+
+            <!-- Mallory Exponent for Bob (m_B) -->
+            <div class="card-section-item">
+              <label class="card-field-label" for="input-mb">Attacker Key for Bob (m_B):</label>
+              <div class="card-input-row">
+                <input type="number" id="input-mb" class="form-input param-input-sm" placeholder="e.g. 7" min="1" disabled>
+                <button id="btn-generate-mb" class="btn-action-green" type="button" title="Generate attacker key for Bob" disabled>
+                  Generate m_B
+                </button>
+              </div>
+              <div id="feedback-mb" class="inline-feedback"></div>
+            </div>
+
+            <div style="display: none;">
+              <span id="disp-mallory-mapriv">—</span>
+              <span id="disp-mallory-mbpriv">—</span>
+              <span id="disp-mallory-ma">—</span>
+              <span id="disp-mallory-mb">—</span>
+            </div>
+
+            <!-- Intercepted Keys (Side-by-Side Split Secrets) -->
+            <div class="mallory-secrets-grid" style="border-top: 1.5px dashed var(--color-danger-border); padding-top: 10px;">
+              <div class="card-section-item">
+                <span class="card-field-label" style="font-size: 0.88rem;">Alice Tunnel (K_A-M):</span>
+                <div id="disp-mallory-ka" class="metric-display-box box-full secret-compromise">—</div>
+              </div>
+
+              <div class="card-section-item">
+                <span class="card-field-label" style="font-size: 0.88rem;">Bob Tunnel (K_M-B):</span>
+                <div id="disp-mallory-kb" class="metric-display-box box-full secret-compromise">—</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- MITM Right Wire Column (Mallory ⇄ Bob) -->
+        <div id="wire-mitm-right" class="channel-column mitm-channel" style="display: none;">
+          <span class="channel-caption" style="color: var(--color-danger);">Intercepted</span>
+          <span id="tag-mb-spoof" class="channel-badge intercepted">Fake M_B &rarr;</span>
+          <span id="tag-b-intercept" class="channel-badge intercepted">&larr; B (Intercepted)</span>
+        </div>
+
+        <!-- Bob Participant Card (Teal/Green Accent) -->
+        <div class="endpoint-card bob" id="node-bob">
+          <div class="endpoint-header">
+            <span class="endpoint-title" style="color: #0d9488;">Bob</span>
+            <span class="endpoint-badge badge-bob">Responder</span>
+          </div>
+
+          <div class="endpoint-body">
+            <!-- Bob Private Key Input -->
+            <div class="card-section-item">
+              <label class="card-field-label" for="input-b">Private Key (b):</label>
+              <div class="card-input-row">
+                <input type="number" id="input-b" class="form-input param-input-sm" placeholder="e.g. 15" min="1" disabled>
+                <button id="btn-generate-b" class="btn-action-green" type="button" title="Generate Bob private key" disabled>
+                  Generate B
+                </button>
+              </div>
+              <div id="feedback-b" class="inline-feedback"></div>
+            </div>
+
+            <!-- Bob Public Key Calculation -->
+            <div class="card-section-item">
+              <span class="card-field-label">Public Key (g^b mod p):</span>
+              <div class="card-input-row">
+                <div class="metric-display-box" id="disp-bob-pub">—</div>
+                <button id="btn-calc-bob-pub" class="btn-action-green" type="button" title="Calculate g^b mod p" disabled>
+                  Calculate g^b
+                </button>
+              </div>
+            </div>
+
+            <div style="display: none;"><span id="disp-bob-priv">—</span></div>
+
+            <!-- Send Public Key to Alice Button -->
+            <button id="btn-send-bob" class="btn-action-blue" type="button" title="Send Bob's public key across channel" disabled>
+              Send Public Key to Alice
+            </button>
+
+            <!-- Received from Alice -->
+            <div class="card-section-item">
+              <span class="card-field-label">Received from Alice:</span>
+              <div class="metric-display-box" id="disp-bob-received">—</div>
+            </div>
+
+            <!-- Bob Derived Shared Secret -->
+            <div class="card-section-item">
+              <span class="card-field-label">Shared Secret:</span>
+              <button id="btn-calc-bob-secret" class="btn-action-orange" type="button" title="Calculate shared secret" disabled>
+                Calculate Shared Secret
+              </button>
+              <div class="metric-display-box" id="disp-bob-secret">—</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Action Button Row -->
+      <div class="calc-row">
+        <button id="btn-calculate" class="btn btn-primary" type="button" disabled>
+          Calculate Keys
+        </button>
+        <span class="calc-hint">Complete the required values.</span>
+      </div>
+    </section>
+
+    <!-- STEP 3: Verification & Cryptographic Proof -->
+    <section class="panel step-card" id="results-card">
+      <div class="step-header">
+        <span class="step-kicker">03 · Inspect the outcome</span>
+        <h2 class="step-title">Step 3: Verification</h2>
+      </div>
+
+      <!-- Status / Verification Banner (Matching Reference Image 3 Bottom) -->
+      <div id="status-banner" class="status-banner ready">
+        <h4>Ready</h4>
+        <p>Enter the required values above.</p>
+      </div>
+
+      <!-- Navigation Tabs -->
+      <nav class="tabs-nav">
+        <button class="tab-btn active" data-tab="formulas" type="button">Formulas & Results</button>
+        <button class="tab-btn" data-tab="steps" type="button">Step-by-Step Calculation</button>
+        <button class="tab-btn" id="tab-btn-tamper" data-tab="tamper" type="button" style="display: none;">Message
+          Tampering Demo</button>
+      </nav>
+
+      <!-- Tab 1: Formulas & Results -->
+      <div id="tab-pane-formulas" class="tab-pane active">
+        <div id="results-formulas" class="formulas-grid">
+          <div style="grid-column: 1 / -1; text-align: center; color: var(--text-muted); padding: 36px 20px;">
+            Results appear here after calculation.
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab 2: Step-by-Step Sequence -->
+      <div id="tab-pane-steps" class="tab-pane">
+        <div class="viva-grid">
+          <div class="viva-card">
+            <h4 class="viva-q">Stage 1: Public Parameter Agreement</h4>
+            <div class="math-display-box">p = prime modulus, g = generator base</div>
+            <p class="viva-a">Alice and Bob agree on public values p and g.</p>
+          </div>
+          <div class="viva-card">
+            <h4 class="viva-q">Stage 2: Private Exponent Selection</h4>
+            <div class="math-display-box">1 &le; a, b &le; p - 2</div>
+            <p class="viva-a">Alice selects a; Bob selects b. Both stay private.</p>
+          </div>
+          <div class="viva-card">
+            <h4 class="viva-q">Stage 3: Public Key Computation & Transmission</h4>
+            <div class="math-display-box">A = gᵃ mod p, B = gᵇ mod p</div>
+            <p class="viva-a">Alice sends A and Bob sends B over the public channel.</p>
+          </div>
+          <div class="viva-card">
+            <h4 class="viva-q">Stage 4: Shared Secret Agreement</h4>
+            <div class="math-display-box">K = Bᵃ mod p = Aᵇ mod p</div>
+            <p class="viva-a">Both derive the same shared key K.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab 3: MITM Message Tampering Demo -->
+      <div id="tab-pane-tamper" class="tab-pane">
+        <div class="tamper-container">
+          <div class="tamper-input-group">
+            <label style="font-weight: 700; font-size: 0.95rem; color: var(--text-main);" for="tamper-msg-input">
+              Simulate Application Message Sent from Alice to Bob:
+            </label>
+            <input type="text" id="tamper-msg-input" class="form-input" value="Transfer $1,000 from Alice to Bob"
+              style="font-family: var(--font-mono);">
+            <span style="font-size: 0.88rem; color: var(--text-muted);">
+              Edit the message above to see how Mallory can transparently decrypt, modify, and re-encrypt the payload
+              using the split session keys.
+            </span>
+          </div>
+          <div id="tamper-output-area"></div>
+        </div>
+      </div>
+
+
+    </section>
+
+    <!-- Footer -->
+    <footer style="text-align: center; color: var(--text-muted); font-size: 0.92rem; padding: 18px 0;">
+      Diffie–Hellman &amp; MITM Simulator
+    </footer>
+
+  </div>
+
+  <script type="module" src="./src/ui/App.js"></script>
+</body>
+
+</html>

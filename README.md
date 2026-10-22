@@ -1,118 +1,85 @@
-# Diffie-Hellman Key Exchange · MITM Attack · PKI Authentication
+# 🔐 Interactive Diffie–Hellman Key Exchange & MITM Simulator
 
-A hands-on demonstration of why unauthenticated Diffie-Hellman is vulnerable to Man-in-the-Middle (MITM) attacks, and how authentication with CA-signed identities and digital signatures prevents DH value substitution. Built as a Cryptography and Network Security mini project.
+A 2D educational laboratory for learning and demonstrating the Diffie–Hellman key exchange algorithm, group theory (primitive roots & multiplicative orders), and Man-in-the-Middle (MITM) attacks.
 
-The project has two parts:
-1. **Python socket implementation** — real TCP processes for Alice, Bob, and Mallory.
-2. **Interactive browser GUI** — a standalone visualizer using the Web Crypto API.
-
-## Project Structure
-
-```text
-.
-├── common.py
-├── pki_common.py
-├── setup_ca.py
-├── alice_client_secure.py
-├── bob_server_secure.py
-├── mallory_proxy_secure.py
-├── dh_mitm_visualizer .html
-├── README.md
-├── .gitignore
-└── pki/                 # generated locally; private keys are never committed
-```
-
-> The repository currently focuses on the authenticated socket demo and browser visualizer. Older documentation referring to `socket_demo/` and `socket_demo_secure/` is obsolete.
-
-## Interactive GUI
-
-Open `dh_mitm_visualizer .html` directly in a modern browser. It demonstrates the four combinations of attacker/authentication and visualizes DH values, certificates, signatures, and encrypted messages.
-
-## Python Socket Demo
-
-### Prerequisites
+## 🚀 Quick Start
 
 ```bash
-python -m pip install cryptography
+# Install dependencies
+npm install
+
+# Start local development server
+npm run dev
+
+# Run unit tests, extended edge cases, and Playwright E2E browser validation
+npm test
+
+# Build production bundle
+npm run build
 ```
 
-### 1. Generate fresh demo PKI materials
+The application will be live at `http://localhost:5173/`.
 
-Run this locally before the first demo:
+---
 
-```bash
-python setup_ca.py
-```
+## 🧮 Cryptographic Foundation & Mathematical Validation
 
-This creates fresh Alice, Bob, and Mallory identity keys and certificates. The CA private key is used only in memory and is **not** written to disk. Never commit generated `pki/*.pem` files.
+### 1. Prime Modulus $p$
+- Must be a prime integer $p \ge 3$.
+- Educational primes included in dropdown: `5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 97`.
+- **Inline Alert for non-primes**:
+  `"Invalid modulus: p must be prime. Please select a prime number."`
 
-### 2. Direct authenticated connection
+### 2. Generator $g$ Validation
+- A generator (primitive root) modulo $p$ must have multiplicative order $p - 1$:
+  $$\operatorname{ord}_p(g) = p - 1$$
+  Equivalently, for every prime factor $q$ of $p - 1$:
+  $$g^{(p - 1) / q} \not\equiv 1 \pmod p$$
+- When $p$ changes, the generator dropdown dynamically populates all integers $2 \le g \le p - 1$.
+- Valid generators are listed first and clearly labeled.
+- **Inline Alert for non-generators**:
+  `"Invalid generator for the selected prime modulus."`
+  accompanied by dynamically computed valid generator suggestion badges (e.g., for $p = 23$, suggestions: `5, 7, 10, 11, 14, 15, 17, 19, 20, 21`).
 
-Terminal 1:
+### 3. Private Exponents ($a$ and $b$)
+- Standard educational range:
+  $$1 \le a \le p - 2 \quad \text{and} \quad 1 \le b \le p - 2$$
+- Exponent values $0$ or $p - 1$ yield trivial public values ($g^0 \equiv 1 \pmod p$ and $g^{p-1} \equiv 1 \pmod p$ by Fermat's Little Theorem).
+- Dynamically populated dropdowns restrict choices to $1 \dots p - 2$ with strict range boundary validation.
 
-```bash
-python bob_server_secure.py
-```
+### 4. Diffie–Hellman Calculations
+1. **Alice Public Key**:
+   $$A = g^a \bmod p$$
+2. **Bob Public Key**:
+   $$B = g^b \bmod p$$
+3. **Alice Shared Secret**:
+   $$K_{\text{Alice}} = B^a \bmod p = (g^b)^a \bmod p$$
+4. **Bob Shared Secret**:
+   $$K_{\text{Bob}} = A^b \bmod p = (g^a)^b \bmod p$$
+5. **Mathematical Identity**:
+   $$(g^b)^a \equiv g^{ab} \equiv (g^a)^b \pmod p \implies K_{\text{Alice}} = K_{\text{Bob}}$$
 
-Terminal 2:
+---
 
-```bash
-python alice_client_secure.py --port 7000
-```
+## 🕵️ Man-in-the-Middle (MITM) Attack Simulation
 
-### 3. MITM attempt
+1. **Interception**:
+   - Alice sends $A \to$ intercepted by Mallory.
+   - Mallory substitutes $M_B = g^{m_B} \bmod p \to$ Bob (Bob believes it is $A$).
+   - Bob sends $B \to$ intercepted by Mallory.
+   - Mallory substitutes $M_A = g^{m_A} \bmod p \to$ Alice (Alice believes it is $B$).
+2. **Split Shared Secrets**:
+   - **Alice Tunnel**: $K_{A-M} = (M_A)^a \equiv A^{m_A} \pmod p$
+   - **Bob Tunnel**: $K_{M-B} = (M_B)^b \equiv B^{m_B} \pmod p$
+   - $K_{A-M} \ne K_{M-B}$ (Split secrets).
+3. **Tampering**:
+   - Mallory holds both keys and can decrypt, inspect, modify, and re-encrypt traffic undetected.
+   - Interactive tampering simulator demonstrates this in real-time.
 
-Terminal 1:
+---
 
-```bash
-python bob_server_secure.py
-```
+## 🎓 College Viva & Examination Reference
 
-Terminal 2:
-
-```bash
-python mallory_proxy_secure.py
-```
-
-Terminal 3:
-
-```bash
-python alice_client_secure.py --port 7500
-```
-
-Mallory substitutes her own DH value while replaying Alice's certificate. Bob verifies the signature against Alice's certified public key and rejects the substitution. Mallory can still make an honest connection as **Mallory**, but cannot impersonate Alice.
-
-## Security Model
-
-The demo uses:
-
-- RFC 3526 Group 14 2048-bit MODP Diffie-Hellman
-- RSA-2048 identity keys
-- RSA-PSS with SHA-256 signatures
-- HKDF-SHA256 for deriving the AES key from the DH secret
-- AES-256-GCM for authenticated encryption
-- Simplified educational certificates signed by a local CA
-
-The certificate format is intentionally simplified and is **not an implementation of X.509/TLS PKI**.
-
-## Security Notes
-
-- Generated private keys are ignored by Git and must remain local.
-- If a private key was ever committed to a public repository, treat it as compromised and regenerate it.
-- The CA private key is intentionally never persisted by `setup_ca.py`.
-- Socket reads have bounded sizes and timeouts to reduce trivial resource-exhaustion issues.
-- Received DH public values are range-checked before shared-secret computation.
-
-## References
-
-- Stallings, W. *Cryptography and Network Security: Principles and Practice.*
-- [RFC 3526](https://www.rfc-editor.org/rfc/rfc3526) — More Modular Exponential (MODP) Diffie-Hellman groups for IKE
-- [Python cryptography documentation](https://cryptography.io/)
-
-## Future Scope
-
-- Replace classical DH/RSA with ECDH/ECDSA.
-- Add certificate expiry, issuer, and revocation checks.
-- Use real X.509 certificates to model a TLS-style trust chain.
-- Add automated tests for DH validation, signatures, certificate validation, and MITM detection.
-- Run the demo across multiple machines in an isolated lab network.
+- **Why must $p$ be prime?** Prime modulus ensures $\mathbb{Z}^*_p$ forms a cyclic multiplicative group of order $p - 1$ where every element has a modular inverse.
+- **What is the Discrete Logarithm Problem?** Computing $A = g^a \bmod p$ is efficient; finding $a$ given $A, g, p$ is computationally intractable for cryptographically large primes.
+- **Why is Diffie–Hellman vulnerable to MITM?** Unauthenticated Diffie–Hellman provides confidentiality against passive eavesdroppers, but provides zero authentication or identity binding. Fixed in TLS 1.3 by signing public ephemeral keys with digital signatures (RSA-PSS or ECDSA) backed by PKI certificates.
